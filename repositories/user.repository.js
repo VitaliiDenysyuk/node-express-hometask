@@ -1,4 +1,65 @@
-const _users = [];
+const fs = require('fs');
+const fileUsers = './users.json';
+let _users = [];
+const _state = {
+    baseRead: false
+}
+function readFile(nameFile) {
+    return new Promise((resolve, reject) => {
+        fs.readFile(nameFile, { encoding: 'utf8' }, (err, data) => {
+            console.log(`read datafile ${nameFile} err=${err} 
+            data = ${data}`);
+            if (err) reject(err)
+            else resolve(data)
+        })
+    })
+}
+function exists(nameFile) {
+    return new Promise((resolve, reject) => {
+        fs.exists(nameFile, (existFile) => {
+            if (!existFile) resolve(false)
+            else resolve(true)
+        })
+    })
+}
+function initBase() {
+    return new Promise((resolve, reject) => {
+        if (_state.baseRead) resolve(true);
+        exists(fileUsers)
+            .then(
+                (result) => {
+                    // we think it's not created yet
+                    // and it will be create after first write
+                    if (!result) {
+                        resolve(true)
+                    } else {
+                        return readFile(fileUsers)
+                    }
+                }
+            ).then(
+                (result) => {
+                    try {
+                        _users = JSON.parse(result);
+                        _state.baseRead = true;
+                        resolve(true);
+                    } catch (err) {
+                        reject(err)
+                    }
+                },
+                (err) => { reject(err) }
+
+            )
+    });
+}
+
+function saveToBase() {
+    return new Promise((resolve, reject) => {
+        fs.writeFile(fileUsers, JSON.stringify(_users), (err) => {
+            if (err) reject(err)
+            resolve(true);
+        })
+    })
+}
 getUsersData = () => {
     return _users;
 }
@@ -14,8 +75,19 @@ addUserData = (user, done) => {
             if (!user._id) {
                 user._id = "" + Date.now();
             }
+
             _users.push(user);
-            done(false, user);
+            saveToBase()
+                .then(
+                    (result) => {
+                        done(false, user)
+                    },
+                    (error) => {
+                        done("Error: " + err)
+                    }
+                );
+
+
         } else {
             done("Error: such user present in database already(name or id)!")
         }
@@ -68,7 +140,15 @@ changeUserData = (id, user, done) => {
                 }
             }
             Object.assign(_users[userInDatabaseIndex], user);
-            done(false, _users[userInDatabaseIndex])
+            saveToBase()
+                .then(
+                    (result) => {
+                        done(false, _users[userInDatabaseIndex])
+                    },
+                    (error) => {
+                        done("Error: " + err)
+                    }
+                );
         }
 
     } else {
@@ -90,13 +170,22 @@ deleteUserByIdData = (id, done) => {
             userInDatabase = _users[userInDatabaseIndex];
             _users[userInDatabaseIndex] = _users.pop();
         }
-        done(false, userInDatabase)
+        saveToBase()
+        .then(
+            (result) => {
+                done(false, userInDatabase)
+            },
+            (error) => {
+                done("Error: " + err)
+            }
+        );
     } else {
         done("Error!!!");
     }
 }
 
 module.exports = {
+    initBase,
     getUsersData,
     addUserData,
     findUserByIdData,
